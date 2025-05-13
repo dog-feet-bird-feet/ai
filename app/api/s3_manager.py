@@ -3,27 +3,43 @@ import os
 import glob
 
 def download_reference_images(urls: list[str]):
-
     idx = 1
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_path = os.path.abspath(os.path.join(base_dir, "../../ai/reference_samples/"))
+
+    print("다운로드할 URL 리스트:", urls)
+    print("저장 경로:", local_path)
+
+    # 폴더 없으면 만들어주기
+    os.makedirs(local_path, exist_ok=True)
+
     for url in urls:
         response = requests.get(url)
-        local_path = "/ai/refence_samples/"
-        image_name = "reference" + idx + ".jpg"
-        idx+=1
+        image_name = f"reference{idx}.jpg"
+        idx += 1
 
-        with open(local_path + image_name, "wb") as f:
+        with open(os.path.join(local_path, image_name), "wb") as f:
             f.write(response.content)
 
 def download_test_image(url: str):
-    response = requests.get(url)
-    local_path = "../../ai/test_samples/"
-    image_name = "test" + ".jpg"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_path = os.path.abspath(os.path.join(base_dir, "../../ai/test_samples/"))
 
-    with open(local_path + image_name, "wb") as f:
+    print("다운로드할 URL:", url)
+    print("저장 경로:", local_path)
+
+    # 폴더 없으면 만들어주기
+    os.makedirs(local_path, exist_ok=True)
+
+    response = requests.get(url)
+    image_name = "test.jpg"
+    with open(os.path.join(local_path, image_name), "wb") as f:
         f.write(response.content)
 
 def delete_reference_images():
-    folder_path = "/ai/refence_samples/"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    folder_path = os.path.abspath(os.path.join(base_dir, "../../ai/reference_samples/"))
     image_paths = glob.glob(os.path.join(folder_path, "reference*.jpg"))
     
     for path in image_paths:
@@ -34,8 +50,9 @@ def delete_reference_images():
             print(f"❌ 삭제 실패: {path} → {e}")
 
 def delete_test_image():
-    folder_path = "../../ai/test_samples/"
-    image_path = os.path.join(folder_path, "test.jpg")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    folder_path = os.path.abspath(os.path.join(base_dir, "../../ai/test_samples/"))
+    image_path = os.path.join(os.path.join(folder_path, "test.jpg"))
     
     if os.path.exists(image_path):
         try:

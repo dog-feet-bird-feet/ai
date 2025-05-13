@@ -268,68 +268,7 @@ def analyze():
 
         print(f"참조 이미지 '{os.path.basename(ref_path)}' 비교 결과: 거리={distance:.4f}, {result}")
 
-    # 결과를 거리순으로 정렬
-    results.sort(key=lambda x: x['distance'])
-
-    # -----------------------------------
-    # 📌 STEP 7. 결과 시각화
-    # -----------------------------------
-    # 결과가 없는 경우 처리
-    if not results:
-        print("❌ 비교할 결과가 없습니다.")
-        exit(1)
-
-    # 테스트 이미지를 그레이스케일로 변환
-    if len(test_img.shape) == 3:
-        test_img_gray = cv2.cvtColor(test_img, cv2.COLOR_BGR2GRAY)
-    else:
-        test_img_gray = test_img
-
-    # 상위 5개 또는 전체 결과 (더 적은 쪽) 표시
-    display_count = min(5, len(results))
-
-    plt.figure(figsize=(15, 3 * display_count))
-
-    # 테스트 이미지 (항상 왼쪽에 표시)
-    plt.subplot(display_count, 3, 1)
-    plt.imshow(test_img_gray, cmap='gray')
-    plt.title("Test Image", fontsize=12)  # 영어로 표시하여 폰트 문제 회피
-    plt.axis('off')
-
-    # 각 참조 이미지 및 결과 표시
-    for i in range(display_count):
-        result = results[i]
-
-        # 참조 이미지
-        plt.subplot(display_count, 3, i * 3 + 2)
-        plt.imshow(result['ref_img'], cmap='gray')
-        plt.title(f"Reference: {result['reference_image']}", fontsize=10)  # 영어로 표시
-        plt.axis('off')
-
-        # 결과 텍스트
-        plt.subplot(display_count, 3, i * 3 + 3)
-        result_text = f"Distance: {result['distance']:.4f}\nResult: "
-        result_text += "Same Person" if result['is_same'] else "Different Person"  # 영어로 표시
-
-        plt.text(0.5, 0.5, result_text,
-                horizontalalignment='center', verticalalignment='center', fontsize=12)
-        plt.axis('off')
-
-        # 배경색 설정 (같은 사람이면 연한 녹색, 다른 사람이면 연한 빨간색)
-        if result['is_same']:
-            plt.gca().set_facecolor((0.9, 1, 0.9))  # 연한 녹색
-        else:
-            plt.gca().set_facecolor((1, 0.9, 0.9))  # 연한 빨간색
-
-    plt.tight_layout()
-    plt.show()
-
     # 종합 결과 출력
     same_person_count = sum(1 for r in results if r['is_same'])
-    print(f"\n결과 요약: 총 {len(results)}개 참조 이미지 중 {same_person_count}개가 테스트 이미지와 같은 사람으로 판별됨")
-
-    # 가장 유사한 참조 이미지 결과
-    if results:
-        best_match = results[0]
-        print(
-            f"가장 유사한 참조 이미지: {best_match['reference_image']} (거리: {best_match['distance']:.4f}, 결과: {best_match['result']})")
+    # print(f"\n결과 요약: 총 {len(results)}개 참조 이미지 중 {same_person_count}개가 테스트 이미지와 같은 사람으로 판별됨")
+    return same_person_count

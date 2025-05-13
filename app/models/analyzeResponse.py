@@ -1,19 +1,17 @@
 
 class AnalyzeResponse:
 
-    def __init__(self, id, similarity, pressure, inclination, verificationImgUrl):
-        self.id = id
+    def __init__(self, similarity, pressure, inclination, verificationImageUrl):
         self.similarity = similarity
         self.pressure = pressure
         self.inclination = inclination
-        self.verificationImgUrl = verificationImgUrl
+        self.verificationImageUrl = verificationImageUrl
 
 
     def to_dict(self):
         return {
-            "id": self.id,
             "similarity": self.similarity,
             "pressure": self.pressure,
             "inclination": self.inclination,
-            "verificationImgUrl": self.verificationImgUrl
+            "verificationImageUrl": self.verificationImageUrl
         }

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter
 from app.models.analyzeRequest import AnalyzeRequest
 from app.models.analyzeResponse import AnalyzeResponse
@@ -14,12 +16,13 @@ def analyze():
 def generate(request: AnalyzeRequest):
     
     # 1. 이미지 다운로드
-    s3_manager.download_reference_images(request.reference_urls)
-    s3_manager.download_test_image(request.test_url)
+    s3_manager.download_reference_images(request.comparisonImageUrls)
+    s3_manager.download_test_image(request.verificationImageUrl)
 
     # 2. 감정 시작
-    ai_model.analyze()
-    appraisal_response = AnalyzeResponse(request.id, 1.0, 23.1, 222.4, "https://s3.aws.com/verifi-url?q=AgfDs3dF5Fgas")
+    # same_person_count = ai_model.analyze()
+    # logging.info(f"same_person_count: {same_person_count}")
+    appraisal_response = AnalyzeResponse(1.0, 23.1, 222.4, "https://s3.aws.com/verifi-url?q=AgfDs3dF5Fgas")
 
     # 3. 이미지 삭제
     s3_manager.delete_reference_images()
