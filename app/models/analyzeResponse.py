@@ -7,6 +7,8 @@ class AnalyzeResponse:
         self.inclination = inclination
         self.verificationImageUrl = verificationImageUrl
 
+    def verificationImageUrl(self, verificationImageUrl):
+        self.verificationImageUrl = verificationImageUrl
 
     def to_dict(self):
         return {

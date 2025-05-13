@@ -1,6 +1,3 @@
-# -----------------------------------
-# 📌 STEP 0. 임포트
-# -----------------------------------
 import numpy as np
 import tensorflow as tf
 import cv2
@@ -10,10 +7,125 @@ import os
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, TimeDistributed, Conv1D, BatchNormalization, LSTM, Dense, Lambda, Reshape
 from tensorflow.keras import backend as K
+from scipy.spatial.distance import cdist
+import math
+import pytesseract
+from pytesseract import Output
 
-# -----------------------------------
-# 📌 STEP 3. 이미지 → 시계열 feature 추출
-# -----------------------------------
+from app.models.analyzeResponse import AnalyzeResponse
+
+
+# 📌 STEP 3. 이미지 줄 추출 함수
+def extract_lines_from_image(img):
+    # 이미지가 컬러인 경우 그레이스케일로 변환
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # 이미지 이진화 (적응형 임계값 사용)
+    _, binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+
+    # 수평 투영 프로필 계산
+    h_proj = np.sum(binary, axis=1)
+
+    # 줄 경계 찾기
+    line_boundaries = []
+    in_line = False
+    line_start = 0
+
+    # 최소 줄 높이 (노이즈 필터링 용)
+    min_line_height = img.shape[0] * 0.02  # 이미지 높이의 2%
+
+    for i, proj in enumerate(h_proj):
+        if not in_line and proj > 0:
+            # 줄 시작
+            in_line = True
+            line_start = i
+        elif in_line and (proj == 0 or i == len(h_proj) - 1):
+            # 줄 끝
+            in_line = False
+            line_end = i
+
+            # 최소 높이보다 큰 줄만 저장
+            if line_end - line_start > min_line_height:
+                line_boundaries.append((line_start, line_end))
+
+    # 원본 이미지에서 줄 추출
+    lines = []
+    for start, end in line_boundaries:
+        # 약간의 여백을 추가하여 줄 추출
+        padding = 5
+        start_padded = max(0, start - padding)
+        end_padded = min(img.shape[0], end + padding)
+
+        line_img = img[start_padded:end_padded, :]
+        lines.append(line_img)
+
+    return lines
+
+def extract_lines_with_ocr(img):
+    """
+    개선된 Tesseract OCR 기반 줄 추출 함수:
+    - 빨간 테두리 제거
+    - 줄 단위 인식 강화 (psm 6)
+    - 줄별 bounding box로 잘라내기
+    """
+    # 1. 빨간 테두리 제거
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask_red = cv2.inRange(hsv, (0, 70, 50), (10, 255, 255)) + \
+                   cv2.inRange(hsv, (170, 70, 50), (180, 255, 255))
+        img[mask_red > 0] = (255, 255, 255)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img.copy()
+
+    # 2. Tesseract OCR로 줄 단위 인식
+    custom_config = r'--psm 6'
+    ocr_data = pytesseract.image_to_data(gray, config=custom_config, output_type=Output.DICT)
+
+    lines = []
+    last_line_num = -1
+    line_group = []
+
+    for i in range(len(ocr_data['text'])):
+        text = ocr_data['text'][i].strip()
+        line_num = ocr_data['line_num'][i]
+
+        if text == '':
+            continue
+
+        x, y, w, h = ocr_data['left'][i], ocr_data['top'][i], ocr_data['width'][i], ocr_data['height'][i]
+
+        if line_num == last_line_num:
+            line_group.append((x, y, w, h))
+        else:
+            if line_group:
+                lines.append(line_group)
+            line_group = [(x, y, w, h)]
+            last_line_num = line_num
+
+    if line_group:
+        lines.append(line_group)
+
+    # 3. 각 줄 영역을 잘라서 반환
+    line_images = []
+    for group in lines:
+        xs = [x for x, y, w, h in group]
+        ys = [y for x, y, w, h in group]
+        ws = [w for x, y, w, h in group]
+        hs = [h for x, y, w, h in group]
+
+        x_min = max(0, min(xs) - 5)
+        y_min = max(0, min(ys) - 5)
+        x_max = min(gray.shape[1], max(x + w for x, w in zip(xs, ws)) + 5)
+        y_max = min(gray.shape[0], max(y + h for y, h in zip(ys, hs)) + 5)
+
+        line_img = gray[y_min:y_max, x_min:x_max]
+        line_images.append(line_img)
+
+    return line_images
+
+# 📌 STEP 4. 이미지 → 시계열 feature 추출
 def extract_features_from_image(img):
     # 이미지가 컬러인 경우 그레이스케일로 변환
     if len(img.shape) == 3 and img.shape[2] == 3:
@@ -69,12 +181,11 @@ def extract_features_from_image(img):
 
     return features.astype(np.float32).reshape(150, 24, 1)
 
-# -----------------------------------
-# 📌 STEP 4. Siamese 모델 정의
-# -----------------------------------
+# 📌 STEP 5. Siamese 모델 정의
 def euclidean_distance(vects):
     x, y = vects
     return K.sqrt(K.sum(K.square(x - y), axis=1, keepdims=True))
+
 
 def net(input_shape, timeseries_n, feature_l):
     input_layer = Input(shape=input_shape)  # (150, 24, 1)
@@ -96,6 +207,7 @@ def net(input_shape, timeseries_n, feature_l):
 
     return Model(inputs=input_layer, outputs=x)
 
+
 def create_full_model(input_shape):
     base_network = net(input_shape, timeseries_n=150, feature_l=24)
 
@@ -109,166 +221,233 @@ def create_full_model(input_shape):
 
     return Model(inputs=[input_a, input_b], outputs=distance)
 
-def analyze():
+# 📌 STEP 7. 줄 별 비교 함수
+def compare_lines(model, test_lines, ref_lines, threshold=0.2):
+    """
+    테스트 이미지의 각 줄과 참조 이미지의 각 줄을 비교하여 유사도 행렬 생성
+    """
+    similarity_matrix = np.zeros((len(test_lines), len(ref_lines)))
 
-    try:
-        font_path = '/System/Library/Fonts/AppleSDGothicNeo.ttc'  # 맥OS 기본 한글 폰트
-        if os.path.exists(font_path):
-            plt.rcParams['font.family'] = 'AppleGothic'
-        else:
-            # 다른 한글 폰트 검색
-            korean_fonts = [f for f in fm.findSystemFonts(fontpaths=None) if any(name in f for name in
-                                                                                ['Gothic', 'Batang', 'Myeongjo', 'Gulim',
-                                                                                'Dotum', 'Malgun', 'NanumGothic',
-                                                                                'NanumMyeongjo'])]
-            if korean_fonts:
-                plt.rcParams['font.family'] = fm.FontProperties(fname=korean_fonts[0]).get_name()
-            else:
-                print("⚠️ 한글 폰트를 찾을 수 없습니다. 한글이 깨져 보일 수 있습니다.")
-    except Exception as e:
-        print(f"폰트 설정 중 오류 발생: {e}")
-        print("⚠️ 폰트 문제로 한글이 깨져 보일 수 있습니다.")
+    for i, test_line in enumerate(test_lines):
+        # 테스트 줄의 특성 추출
+        test_feat = np.expand_dims(extract_features_from_image(test_line), axis=0)
 
-    # -----------------------------------
-    # 📌 STEP 2. 경로 설정 및 검증
-    # -----------------------------------
-    # 참조 이미지가 있는 폴더와 테스트 이미지가 있는 폴더 경로
-    reference_dir = 'reference_samples'
-    test_dir = 'test_samples'
-    model_path = 'our.net.hdf5'  # 현재 디렉토리에 모델 파일이 있는 경우
+        for j, ref_line in enumerate(ref_lines):
+            # 참조 줄의 특성 추출
+            ref_feat = np.expand_dims(extract_features_from_image(ref_line), axis=0)
 
-    # 디렉토리 존재 여부 확인
-    if not os.path.exists(reference_dir):
-        print(f"⚠️ 참조 디렉토리가 존재하지 않습니다: {reference_dir}")
-        os.makedirs(reference_dir)
-        print(f"디렉토리를 생성했습니다. 참조 이미지를 추가해주세요.")
-        exit(1)
+            # 거리 계산
+            distance = model.predict([test_feat, ref_feat], verbose=0)[0][0]
 
-    if not os.path.exists(test_dir):
-        print(f"⚠️ 테스트 디렉토리가 존재하지 않습니다: {test_dir}")
-        os.makedirs(test_dir)
-        print(f"디렉토리를 생성했습니다. 테스트 이미지를 추가해주세요.")
-        exit(1)
+            # 거리를 유사도로 변환 (거리가 작을수록 유사도가 높음)
+            # 거리가 0이면 완전히 일치, 거리가 클수록 차이가 커짐
+            # 유사도를 0~1 사이로 정규화 (0: 완전히 다름, 1: 완전히 일치)
+            similarity = math.exp(-distance * 5)  # 지수 함수를 사용해 0~1 범위로 매핑
+            similarity_matrix[i, j] = similarity
 
-    # 참조 이미지 경로 목록
-    reference_img_paths = [os.path.join(reference_dir, f) for f in os.listdir(reference_dir)
-                        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    return similarity_matrix
 
-    if not reference_img_paths:
-        print(f"⚠️ 참조 디렉토리에 이미지 파일이 없습니다: {reference_dir}")
-        print("지원 형식: PNG, JPG, JPEG")
-        exit(1)
+# 📌 STEP 8. 유사도 행렬 기반 매칭 수행
+def find_best_matches(similarity_matrix):
+    """
+    유사도 행렬에서 각 테스트 줄에 대한 가장 유사한 참조 줄 찾기
+    """
+    best_matches = []
+    # 각 테스트 줄에 대해 최고 유사도와 해당 참조 줄 인덱스 찾기
+    for i in range(similarity_matrix.shape[0]):
+        best_ref_idx = np.argmax(similarity_matrix[i])
+        best_similarity = similarity_matrix[i, best_ref_idx]
+        best_matches.append((i, best_ref_idx, best_similarity))
 
-    # 테스트 이미지 경로 목록
-    test_img_paths = [os.path.join(test_dir, f) for f in os.listdir(test_dir)
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    return best_matches
 
-    if not test_img_paths:
-        print(f"⚠️ 테스트 디렉토리에 이미지 파일이 없습니다: {test_dir}")
-        print("지원 형식: PNG, JPG, JPEG")
-        exit(1)
 
-    # 테스트 이미지 선택 (첫 번째 이미지 사용)
-    test_img_path = test_img_paths[0]
-    print(f"테스트 이미지: {os.path.basename(test_img_path)}")
-    print(f"참조 이미지 수: {len(reference_img_paths)}")
+# 📌 STEP 9. 테스트 이미지와 참조 이미지들 비교 (수정됨)
+def extract_pressure_slant_features(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img.copy()
+    binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
 
-    # 모델 파일 존재 확인
+    # 필압 추정: 평균 밝기 (검은색에 가까울수록 필압이 진함)
+    pressure_score = np.mean(binary) / 255.0  # 0~1로 정규화
+
+    # 기울기 추정: Hough transform을 사용한 라인 기울기
+    edges = cv2.Canny(binary, 50, 150, apertureSize=3)
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, 100)
+    if lines is not None:
+        angles = [(theta - np.pi / 2) for rho, theta in lines[:, 0]]
+        slant_score = np.mean(np.abs(angles)) / (np.pi / 4)  # 0~1 범위로 정규화
+    else:
+        slant_score = 0.0
+
+    return pressure_score, slant_score
+
+
+def check_directories_and_model(reference_dir, test_dir, model_path):
+    for dir_path in [reference_dir, test_dir]:
+        if not os.path.exists(dir_path):
+            print(f"⚠️ 디렉토리가 존재하지 않습니다: {dir_path}")
+            os.makedirs(dir_path)
+            print(f"디렉토리를 생성했습니다: {dir_path}")
+            exit(1)
+
     if not os.path.exists(model_path):
-        print(f"⚠️ 모델 파일이 지정된 경로에 존재하지 않습니다: {model_path}")
-        # 프로젝트 폴더에서 hdf5 파일 찾기
+        print(f"⚠️ 모델 파일이 없습니다: {model_path}")
         found_models = []
         for root, dirs, files in os.walk('.'):
             for file in files:
-                if file.endswith('.hdf5') or file.endswith('.h5'):
+                if file.endswith(('.hdf5', '.h5')):
                     found_models.append(os.path.join(root, file))
-
-        if found_models:
-            print("💡 다음 모델 파일을 찾았습니다:")
-            for i, found_model in enumerate(found_models):
-                print(f"  {i + 1}. {found_model}")
-
-            choice = input("사용할 모델 번호를 입력하세요 (또는 q로 종료): ")
-            if choice.lower() == 'q':
-                exit(1)
-            try:
-                model_path = found_models[int(choice) - 1]
-                print(f"선택한 모델: {model_path}")
-            except (ValueError, IndexError):
-                print("잘못된 선택입니다. 프로그램을 종료합니다.")
-                exit(1)
-        else:
-            print("💡 프로젝트 폴더에서 .hdf5 또는 .h5 파일을 찾을 수 없습니다.")
-            custom_path = input("모델 파일의 전체 경로를 입력하세요 (또는 q로 종료): ")
-            if custom_path.lower() == 'q':
+        if not found_models:
+            custom_path = input("모델 파일 경로 입력 (q로 종료): ")
+            if custom_path.lower() == 'q' or not os.path.exists(custom_path):
                 exit(1)
             model_path = custom_path
-            if not os.path.exists(model_path):
-                print(f"입력한 경로에 파일이 존재하지 않습니다: {model_path}")
-                print("프로그램을 종료합니다.")
+        else:
+            for i, model in enumerate(found_models):
+                print(f"{i + 1}. {model}")
+            choice = input("사용할 모델 번호 입력 (q로 종료): ")
+            if choice.lower() == 'q':
                 exit(1)
+            model_path = found_models[int(choice) - 1]
+    return model_path
 
-    # -----------------------------------
-    # 📌 STEP 5. 모델 생성 및 가중치 로딩
-    # -----------------------------------
+
+def load_images(reference_dir, test_dir):
+    reference_img_paths = [os.path.join(reference_dir, f) for f in os.listdir(reference_dir)
+                           if f.lower().endswith(('png', 'jpg', 'jpeg'))]
+    test_img_paths = [os.path.join(test_dir, f) for f in os.listdir(test_dir)
+                      if f.lower().endswith(('png', 'jpg', 'jpeg'))]
+
+    if not reference_img_paths:
+        print(f"⚠️ 참조 이미지 없음: {reference_dir}")
+        exit(1)
+    if not test_img_paths:
+        print(f"⚠️ 테스트 이미지 없음: {test_dir}")
+        exit(1)
+
+    test_img_path = test_img_paths[0]
+    print(f"테스트 이미지: {os.path.basename(test_img_path)}")
+    print(f"참조 이미지 수: {len(reference_img_paths)}")
+    return reference_img_paths, test_img_path
+
+
+def build_and_load_model(model_path):
     input_shape = (150, 24, 1)
     model = create_full_model(input_shape)
-
-    # 모델 가중치 로드
     try:
         model.load_weights(model_path)
-        print(f"✅ 모델 가중치를 성공적으로 로드했습니다: {model_path}")
+        print(f"✅ 모델 가중치 로드 성공: {model_path}")
     except Exception as e:
         print(f"❌ 모델 가중치 로드 실패: {e}")
         exit(1)
+    return model
 
-    # -----------------------------------
-    # 📌 STEP 6. 테스트 이미지와 참조 이미지들 비교
-    # -----------------------------------
-    # 테스트 이미지 로드 및 특성 추출
-    test_img = cv2.imread(test_img_path)
-    if test_img is None:
-        print(f"❌ 테스트 이미지를 로드할 수 없습니다: {test_img_path}")
-        exit(1)
 
-    test_feat = np.expand_dims(extract_features_from_image(test_img), axis=0)  # (1, 150, 24, 1)
-
-    # 임계값 설정
-    threshold = 0.2
-
-    # 결과 저장을 위한 리스트
+def analyze_images(model, reference_img_paths, test_img_path, threshold=0.5):
     results = []
+    test_img = cv2.imread(test_img_path)
 
-    # 각 참조 이미지와 비교
     for ref_path in reference_img_paths:
-        # 참조 이미지 로드
         ref_img = cv2.imread(ref_path)
-        if ref_img is None:
-            print(f"⚠️ 참조 이미지를 로드할 수 없습니다: {ref_path}")
+        if ref_img is None or test_img is None:
+            print(f"❌ 이미지 로드 실패: {ref_path} 또는 {test_img_path}")
             continue
 
-        # 특성 추출
-        ref_feat = np.expand_dims(extract_features_from_image(ref_img), axis=0)
+        test_lines = extract_lines_with_ocr(test_img)
+        ref_lines = extract_lines_with_ocr(ref_img)
 
-        # 거리 계산
-        distance = model.predict([test_feat, ref_feat], verbose=0)[0][0]
+        if not test_lines or not ref_lines:
+            print(f"⚠️ 줄 추출 실패: {ref_path}")
+            continue
 
-        # 같은 사람인지 판별
-        is_same = distance < threshold
-        result = "같은 사람" if is_same else "다른 사람"
+        similarity_matrix = compare_lines(model, test_lines, ref_lines)
+        avg_similarity = np.mean(similarity_matrix)
+        best_match_avg = np.mean([np.max(similarity_matrix[i]) for i in range(similarity_matrix.shape[0])])
 
-        # 결과 저장
+        pressure_scores, slant_scores = [], []
+        for line in test_lines + ref_lines:
+            pressure, slant = extract_pressure_slant_features(line)
+            pressure_scores.append(pressure)
+            slant_scores.append(slant)
+
+        avg_pressure = np.mean(pressure_scores)
+        avg_slant = np.mean(slant_scores)
+
+        is_same = avg_similarity > threshold
+        result = "같은 문서" if is_same else "다른 문서"
+
         results.append({
             'reference_image': os.path.basename(ref_path),
-            'distance': distance,
+            'avg_similarity': avg_similarity,
+            'best_match_avg': best_match_avg,
+            'avg_pressure': avg_pressure,
+            'avg_slant': avg_slant,
             'result': result,
             'is_same': is_same,
-            'ref_img': ref_img if len(ref_img.shape) == 2 else cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
+            'similarity_matrix': similarity_matrix,
+            'ref_img': ref_img,
+            'test_lines': test_lines,
+            'ref_lines': ref_lines,
+            'best_matches': find_best_matches(similarity_matrix)
         })
 
-        print(f"참조 이미지 '{os.path.basename(ref_path)}' 비교 결과: 거리={distance:.4f}, {result}")
+    results.sort(key=lambda x: x['best_match_avg'], reverse=True)
+    return results, test_img
 
-    # 종합 결과 출력
-    same_person_count = sum(1 for r in results if r['is_same'])
-    # print(f"\n결과 요약: 총 {len(results)}개 참조 이미지 중 {same_person_count}개가 테스트 이미지와 같은 사람으로 판별됨")
-    return same_person_count
+
+def visualize_results(results, test_img):
+    if not results:
+        print("❌ 비교할 결과 없음")
+        exit(1)
+
+    best_result = results[0]
+    similarity_percent = best_result['avg_similarity'] * 100
+    pressure_percent = best_result['avg_pressure'] * 100
+    slant_percent = best_result['avg_slant'] * 100
+    best_match_percent = best_result['best_match_avg'] * 100
+
+    print(f"\n🏆 최고 유사도 결과: {best_result['reference_image']}")
+    print(f"줄 매칭 평균 유사도: {best_match_percent:.2f}%")
+    print(f"전체 유사도 평균: {similarity_percent:.2f}%")
+    print(f"평균 필압(Pressure): {pressure_percent:.2f}%")
+    print(f"평균 기울기(Slant): {slant_percent:.2f}%")
+    print(f"판정 결과: {best_result['result']}")
+
+    plt.figure(figsize=(15, 10))
+    plt.subplot(2, 2, 1)
+    plt.imshow(best_result['similarity_matrix'], cmap='viridis', aspect='auto')
+    plt.title(f"Line Similarity Matrix")
+    plt.subplot(2, 2, 2)
+    plt.imshow(cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB))
+    plt.title("Test Image")
+    plt.subplot(2, 2, 3)
+    plt.imshow(cv2.cvtColor(best_result['ref_img'], cv2.COLOR_BGR2RGB))
+    plt.title(f"Reference Image")
+    plt.subplot(2, 2, 4)
+    plt.text(0.5, 0.5,
+             f"Best Match: {best_match_percent:.2f}%\nSimilarity: {similarity_percent:.2f}%\nPressure: {pressure_percent:.2f}%\nSlant: {slant_percent:.2f}%",
+             horizontalalignment='center', verticalalignment='center', fontsize=12)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+def create_result(results):
+    if not results:
+        print("❌ 비교할 결과 없음")
+        exit(1)
+
+    best_result = results[0]
+
+    return AnalyzeResponse(best_result['avg_similarity'], best_result['avg_pressure'], best_result['avg_slant'], "")
+
+def analyze():
+    reference_dir = 'ai/reference_samples'
+    test_dir = 'ai/test_samples'
+    model_path = 'ai/model/our_net.hdf5'
+
+    model_path = check_directories_and_model(reference_dir, test_dir, model_path)
+    reference_img_paths, test_img_path = load_images(reference_dir, test_dir)
+    model = build_and_load_model(model_path)
+    results, test_img = analyze_images(model, reference_img_paths, test_img_path)
+    # visualize_results(results, test_img)
+    return create_result(results)
