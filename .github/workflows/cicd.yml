@@ -31,4 +31,5 @@ jobs:
         script: |
           cd ~/fastapi-app
           source ~/fastapi-app/venv/bin/activate
-          sudo systemctl restart fastapi
+          cd ./app
+          python3.9 -m uvicorn app.main:app --reload
