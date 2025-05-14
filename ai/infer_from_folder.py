@@ -1,13 +1,8 @@
 import numpy as np
-import tensorflow as tf
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 import os
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, TimeDistributed, Conv1D, BatchNormalization, LSTM, Dense, Lambda, Reshape
 from tensorflow.keras import backend as K
-from scipy.spatial.distance import cdist
 import math
 import pytesseract
 from pytesseract import Output
@@ -394,43 +389,6 @@ def analyze_images(model, reference_img_paths, test_img_path, threshold=0.5):
     results.sort(key=lambda x: x['best_match_avg'], reverse=True)
     return results, test_img
 
-
-def visualize_results(results, test_img):
-    if not results:
-        print("❌ 비교할 결과 없음")
-        exit(1)
-
-    best_result = results[0]
-    similarity_percent = best_result['avg_similarity'] * 100
-    pressure_percent = best_result['avg_pressure'] * 100
-    slant_percent = best_result['avg_slant'] * 100
-    best_match_percent = best_result['best_match_avg'] * 100
-
-    print(f"\n🏆 최고 유사도 결과: {best_result['reference_image']}")
-    print(f"줄 매칭 평균 유사도: {best_match_percent:.2f}%")
-    print(f"전체 유사도 평균: {similarity_percent:.2f}%")
-    print(f"평균 필압(Pressure): {pressure_percent:.2f}%")
-    print(f"평균 기울기(Slant): {slant_percent:.2f}%")
-    print(f"판정 결과: {best_result['result']}")
-
-    plt.figure(figsize=(15, 10))
-    plt.subplot(2, 2, 1)
-    plt.imshow(best_result['similarity_matrix'], cmap='viridis', aspect='auto')
-    plt.title(f"Line Similarity Matrix")
-    plt.subplot(2, 2, 2)
-    plt.imshow(cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB))
-    plt.title("Test Image")
-    plt.subplot(2, 2, 3)
-    plt.imshow(cv2.cvtColor(best_result['ref_img'], cv2.COLOR_BGR2RGB))
-    plt.title(f"Reference Image")
-    plt.subplot(2, 2, 4)
-    plt.text(0.5, 0.5,
-             f"Best Match: {best_match_percent:.2f}%\nSimilarity: {similarity_percent:.2f}%\nPressure: {pressure_percent:.2f}%\nSlant: {slant_percent:.2f}%",
-             horizontalalignment='center', verticalalignment='center', fontsize=12)
-    plt.axis('off')
-    plt.tight_layout()
-    plt.show()
-
 def create_result(results):
     if not results:
         print("❌ 비교할 결과 없음")
@@ -449,5 +407,4 @@ def analyze():
     reference_img_paths, test_img_path = load_images(reference_dir, test_dir)
     model = build_and_load_model(model_path)
     results, test_img = analyze_images(model, reference_img_paths, test_img_path)
-    # visualize_results(results, test_img)
     return create_result(results)
