@@ -16,15 +16,15 @@ def analyze():
 def generate(request: AnalyzeRequest):
     
     # 1. 이미지 다운로드
-    # s3_manager.download_reference_images(request.comparisonImageUrls)
-    # s3_manager.download_test_image(request.verificationImageUrl)
+    s3_manager.download_reference_images(request.comparisonImageUrls)
+    s3_manager.download_test_image(request.verificationImageUrl)
 
     # 2. 감정 시작
     appraisal_response = ai_model.analyze()
     appraisal_response.verificationImageUrl = request.verificationImageUrl
 
     # 3. 이미지 삭제
-    # s3_manager.delete_reference_images()
-    # s3_manager.delete_test_image()
+    s3_manager.delete_reference_images()
+    s3_manager.delete_test_image()
 
     return appraisal_response
