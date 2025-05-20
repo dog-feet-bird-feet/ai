@@ -326,19 +326,6 @@ def load_images(reference_dir, test_dir):
     print(f"참조 이미지 수: {len(reference_img_paths)}")
     return reference_img_paths, test_img_path
 
-
-def build_and_load_model(model_path):
-    input_shape = (150, 24, 1)
-    model = create_full_model(input_shape)
-    try:
-        model.load_weights(model_path)
-        print(f"✅ 모델 가중치 로드 성공: {model_path}")
-    except Exception as e:
-        print(f"❌ 모델 가중치 로드 실패: {e}")
-        exit(1)
-    return model
-
-
 def analyze_images(model, reference_img_paths, test_img_path, threshold=0.5):
     results = []
     test_img = cv2.imread(test_img_path)
@@ -399,13 +386,12 @@ def create_result(results):
 
     return AnalyzeResponse(best_result['avg_similarity'], best_result['avg_pressure'], best_result['avg_slant'], "")
 
-def analyze():
+def analyze(model):
     reference_dir = 'ai/reference_samples'
     test_dir = 'ai/test_samples'
     model_path = 'ai/model/our_net.hdf5'
 
     model_path = check_directories_and_model(reference_dir, test_dir, model_path)
     reference_img_paths, test_img_path = load_images(reference_dir, test_dir)
-    model = build_and_load_model(model_path)
     results, test_img = analyze_images(model, reference_img_paths, test_img_path)
     return create_result(results)
