@@ -37,6 +37,20 @@ def download_test_image(url: str):
     with open(os.path.join(local_path, image_name), "wb") as f:
         f.write(response.content)
 
+def download_personality_image(url: str):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_path = os.path.abspath(os.path.join(base_dir, "../../ai/analyze_image/"))
+
+    print("다운로드할 URL:", url)
+    print("저장 경로:", local_path)
+
+    os.makedirs(local_path, exist_ok=True)
+
+    response = requests.get(url)
+    image_name = "personality.jpg"
+    with open(os.path.join(local_path, image_name), "wb") as f:
+        f.write(response.content)
+
 def delete_reference_images():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     folder_path = os.path.abspath(os.path.join(base_dir, "../../ai/reference_samples/"))
@@ -54,6 +68,19 @@ def delete_test_image():
     folder_path = os.path.abspath(os.path.join(base_dir, "../../ai/test_samples/"))
     image_path = os.path.join(os.path.join(folder_path, "test.jpg"))
     
+    if os.path.exists(image_path):
+        try:
+            os.remove(image_path)
+            print(f"🗑️ 삭제 완료: {image_path}")
+        except Exception as e:
+            print(f"❌ 삭제 실패: {image_path} → {e}")
+    else:
+        print(f"⚠️ 파일 없음: {image_path}")
+
+def delete_personality_image():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    folder_path = os.path.abspath(os.path.join(base_dir, "../../ai/analyze_image/"))
+    image_path = os.path.join(os.path.join(folder_path, "personality.jpg"))
     if os.path.exists(image_path):
         try:
             os.remove(image_path)
