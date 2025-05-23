@@ -46,12 +46,15 @@ instrumentator.instrument(app).expose(app)
 
 cpu_usage_gauge = Gauge("app_cpu_usage_percent", "CPU usage percent")
 thread_count_gauge = Gauge("app_thread_count", "Number of threads")
+memory_usage_gauge = Gauge("app_memory_usage_bytes", "Memory usage in bytes")
 
 # 별도 스레드로 주기적으로 수집
 def system_metrics_collector():
+    process = psutil.Process(os.getpid())  # ✅ 현재 프로세스
     while True:
         cpu_usage_gauge.set(psutil.cpu_percent())
         thread_count_gauge.set(threading.active_count())
+        memory_usage_gauge.set(process.memory_info().rss)
         time.sleep(5)
 
 # 수집기 시작
