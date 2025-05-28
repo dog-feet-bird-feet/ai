@@ -249,7 +249,7 @@ def analyze(model):
             print(f"❌ 판별 결과: 다른 사람입니다 (유사도 < {threshold})")
         print("#" * 50)
 
-        summary = create_result(similarity_scores, avg_score)
+        summary = create_result(similarity_scores, avg_score, test_handcrafted)
         return summary
     else:
         print("❌ 유사도 계산에 실패했습니다.")
