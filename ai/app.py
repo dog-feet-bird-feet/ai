@@ -6,6 +6,33 @@ from tensorflow.keras import layers
 import glob
 from app.models.analyzeResponse import AnalyzeResponse
 
+def is_handwriting_image(image, pixel_threshold_ratio=0.01, min_contours=5):
+    """
+    이미지에 글씨가 포함되어 있는지 판단
+    - 픽셀 기준: 전체 픽셀 중 어두운 영역의 비율
+    - 컨투어 기준: 윤곽선(획) 개수
+    """
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image.copy()
+
+    # 이진화 및 닫기 연산 (노이즈 제거)
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+
+    # 1. 픽셀 비율 검사
+    pixel_ratio = np.sum(binary > 0) / binary.size
+    if pixel_ratio < pixel_threshold_ratio:
+        return False  # 너무 비어 있음
+
+    # 2. 컨투어 개수 검사
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) < min_contours:
+        return False
+
+    return True
+
 # ========================= 수동 특징 추출 =========================
 def extract_handcrafted_features(gray_img, binary_img=None):
     features = []
@@ -66,11 +93,12 @@ def extract_handcrafted_features(gray_img, binary_img=None):
 # ========================= 이미지 전처리 =========================
 def preprocess_image(image_path, target_height=64, target_width=512):
     try:
-        print(f"✅ image_path = {image_path}")
-        print(f"✅ os.path.isfile(image_path) = {os.path.isfile(image_path)}")
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError(f"이미지를 불러올 수 없습니다: {image_path}")
+
+        if not is_handwriting_image(img):
+            raise ValueError("⚠️ 글씨가 없는 이미지입니다.")
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
         original_gray = gray.copy()
@@ -126,29 +154,47 @@ def get_similarity(model, image1_path, image2_path):
     pressure = (hand1[0] + hand2[0]) / 2
     slant = (hand1[1] + hand2[1]) / 2
 
-    return similarity, pressure, slant
+    return similarity, pressure, slant, hand2
+
+def rescale_similarity(similarity, split_point=0.8):
+    """
+    유사도를 0~100% 범위로 재정규화하되,
+    0~split_point는 0~50%, split_point~1.0은 50~100%로 분할
+    """
+    if similarity < split_point:
+        return (similarity / split_point) * 50
+    else:
+        return 50 + ((similarity - split_point) / (1.0 - split_point)) * 50
 
 # ========================= 결과 생성 =========================
-def create_result(results, avg_score):
+def create_result(results, avg_score, test_handcrafted):
     if not results:
         print("❌ 비교할 결과 없음")
         return None
 
-    best_result = results[0]
-    avg_pressure = best_result.get('pressure', 0.0)
-    avg_slant = best_result.get('slant', 0.0)
+    test_pressure = test_handcrafted[0]
+    test_slant = test_handcrafted[1]
 
+    avg_pressure = np.mean([r['pressure'] for r in results])
+    avg_slant = np.mean([r['slant'] for r in results])
+    rescaled_score = rescale_similarity(avg_score)
+
+    pressure_diff = abs(avg_pressure - test_pressure)
+    slant_diff = abs(avg_slant - test_slant)
+    pressure_sim = max(0, 1 - pressure_diff) * 100
+    slant_sim = max(0, 1 - slant_diff) * 100
     print("\n" + "=" * 50)
     print("📝 최종 결과 요약")
-    print(f"📌 평균 유사도: {avg_score*100:.4f}%")
-    print(f"📌 평균 필압: {avg_pressure:.4f}")
-    print(f"📌 평균 기울기: {avg_slant:.4f}")
+    print(f"📌 평균 유사도: {avg_score * 100:.4f}%")
+    print(f"📌 재정규화 유사도: {rescaled_score:.2f}%")
+    print(f"📌 평균 필압: {avg_pressure:.4f} (유사도: {pressure_sim:.2f})%")
+    print(f"📌 평균 기울기: {avg_slant:.4f} (유사도: {slant_sim:.2f})%")
     print("=" * 50)
 
     return AnalyzeResponse(
-        float(avg_score),
-        float(avg_pressure),
-        float(avg_slant),
+        float(rescaled_score),
+        float(pressure_sim),
+        float(slant_sim),
         ""
     )
 
@@ -163,19 +209,26 @@ def analyze(model):
     test_image_path = find_first_image("ai/test_samples")
 
     similarity_scores = []
+    test_handcrafted = None
 
     for filename in os.listdir(reference_folder):
         ref_path = os.path.join(reference_folder, filename)
         if os.path.isfile(ref_path) and filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             print(f"✅ 유효한 이미지 파일: {filename}")
-            similarity, pressure, slant = get_similarity(model, ref_path, test_image_path)
-            if similarity is not None:
-                similarity_scores.append({
-                    'reference': filename,
-                    'similarity': similarity,
-                    'pressure': pressure,
-                    'slant': slant
-                })
+            similarity, pressure, slant, test_feat = get_similarity(model, ref_path, test_image_path)
+
+            if test_feat is None or similarity is None:
+                continue
+
+            if test_handcrafted is None:
+                test_handcrafted = test_feat
+
+            similarity_scores.append({
+                'reference': filename,
+                'similarity': similarity,
+                'pressure': pressure,
+                'slant': slant
+            })
         else:
             print(f"⚠️ 무시된 파일: {filename}")
 
