@@ -17,21 +17,21 @@ def generate_summary_paragraph(traits):
 
     # 필압
     if '의지가 굳음' in traits['pressure']:
-        parts.append("강한 의지와 자기주장을 바탕으로 활력 있게 자신의 생각을 표현합니다")
+        parts.append("강한 의지와 자기주장을 바탕으로 활력 있게 자신의 생각을 표현합니다.")
     else:
-        parts.append("유순하고 민감하며 에너지는 다소 낮지만 주변에 조화롭게 어울립니다")
+        parts.append("유순하고 민감하며 에너지는 다소 낮지만 주변에 조화롭게 어울립니다.")
 
     # 기울기
     if '낙관적' in traits['slant']:
         parts.append("낙관적이고 진취적인 태도를 가지고 있으며")
     else:
-        parts.append("감정을 드러내는 데 소극적이고 신중하며 다소 비판적인 관점을 지닙니다")
+        parts.append("감정을 드러내는 데 소극적이고 신중하며 다소 비판적인 관점을 지닙니다.")
 
     # 글자 모양
     if '사고가 유연함' in traits['shape']:
-        parts.append("사고가 유연하고 상상력이 풍부하여 원만하고 합리적인 관계를 지향하는 경향이 있습니다")
+        parts.append("사고가 유연하고 상상력이 풍부하여 원만하고 합리적인 관계를 지향하는 경향이 있습니다.")
     else:
-        parts.append("정직하고 규범을 중시하며 단호하고 원칙적인 태도를 유지합니다")
+        parts.append("정직하고 규범을 중시하며 단호하고 원칙적인 태도를 유지합니다.")
 
     return " ".join(parts)
 
@@ -516,22 +516,29 @@ def main():
     print("\n성격 요약:")
     print(result["personality"]["summary"])
 
+    ko_map = {
+        'size': {'small': '작음', 'large': '큼'},
+        'pressure': {'strong': '강함', 'weak': '약함'},
+        'slant': {'rightward': '우상향', 'leftward': '우하향'},
+        'shape': {'round': '둥글다', 'angular': '각지다'}
+    }
+
     return PersonalityResponse(
         traits=Traits(
             size=Trait(
-                score=result["personality"]["categories"]["size"],  # ← 카테고리 문자열
+                score=ko_map['size'][result["personality"]["categories"]["size"]],
                 detail=result["personality"]["traits"]["size"]
             ),
             pressure=Trait(
-                score=result["personality"]["categories"]["pressure"],
+                score=ko_map['pressure'][result["personality"]["categories"]["pressure"]],
                 detail=result["personality"]["traits"]["pressure"]
             ),
             inclination=Trait(
-                score=result["personality"]["categories"]["slant"],
+                score=ko_map['slant'][result["personality"]["categories"]["slant"]],
                 detail=result["personality"]["traits"]["slant"]
             ),
             shape=Trait(
-                score=result["personality"]["categories"]["shape"],
+                score=ko_map['shape'][result["personality"]["categories"]["shape"]],
                 detail=result["personality"]["traits"]["shape"]
             )
         ),
