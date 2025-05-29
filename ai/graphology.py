@@ -477,7 +477,7 @@ class HandwritingAnalyzer:
 
         # ✅ 글씨 유무 검사
         try:
-            check_handwriting_presence(processed_images['binary'])
+            self.check_handwriting_presence(processed_images['binary'])
         except ValueError as e:
             return {"error": str(e)}
 
