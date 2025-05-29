@@ -449,7 +449,7 @@ class HandwritingAnalyzer:
         plt.tight_layout()
         return fig
 
-    def check_handwriting_presence(binary_image, min_contours=3, min_area=30):
+    def check_handwriting_presence(self, binary_image, min_contours=3, min_area=30):
         """
         이진화된 이미지에서 글씨가 있는지 판단하는 함수.
         일정 수 이상의 유의미한 윤곽선이 있어야 글씨가 있다고 판단.
