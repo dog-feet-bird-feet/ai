@@ -207,6 +207,15 @@ def find_first_image(folder_path):
 def analyze(model):
     reference_folder = 'ai/reference_samples'
     test_image_path = find_first_image("ai/test_samples")
+    # ✅ 테스트 이미지에서 글씨 유무 확인
+    test_img_cv = cv2.imread(test_image_path)
+    if test_img_cv is None:
+        print(f"❌ 테스트 이미지 로드 실패: {test_image_path}")
+        exit()
+
+    if not is_handwriting_image(test_img_cv):
+        print("⚠️ 테스트 이미지에 글씨가 감지되지 않았습니다. 프로그램을 종료합니다.")
+        exit()
 
     similarity_scores = []
     test_handcrafted = None
