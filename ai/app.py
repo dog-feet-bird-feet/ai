@@ -181,8 +181,8 @@ def create_result(results, avg_score, test_handcrafted):
 
     pressure_diff = abs(avg_pressure - test_pressure)
     slant_diff = abs(avg_slant - test_slant)
-    pressure_sim = max(0, 1 - pressure_diff) * 100
-    slant_sim = max(0, 1 - slant_diff) * 100
+    pressure_sim = max(0, 1 - pressure_diff) * 100 * avg_score
+    slant_sim = max(0, 1 - slant_diff) * 100 * avg_score
     print("\n" + "=" * 50)
     print("📝 최종 결과 요약")
     print(f"📌 평균 유사도: {avg_score * 100:.4f}%")
