@@ -450,30 +450,30 @@ class HandwritingAnalyzer:
         return fig
 
     def check_handwriting_presence_with_ocr(image, min_text_length=3):
-    """
-    OCR을 통해 이미지에 실제 텍스트(글씨)가 존재하는지 판단합니다.
-
-    Args:
-        image (np.ndarray): 원본 이미지 또는 전처리 이미지 (BGR 또는 Grayscale 가능)
-        min_text_length (int): 글자로 판단할 최소 텍스트 길이
-
-    Raises:
-        ValueError: 글자가 없다고 판단될 경우
-    """
-    # 흑백으로 변환 (Tesseract는 RGB 또는 Grayscale 사용 가능)
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image.copy()
-
-    # OCR 수행
-    text = pytesseract.image_to_string(gray, lang='kor+eng')  # 한국어와 영어 모두 인식
-
-    # 텍스트 길이 기준으로 판단
-    if len(text.strip()) < min_text_length:
-        raise ValueError("OCR 분석 결과 글씨가 감지되지 않았습니다.")
-
-    print(f"OCR 감지 텍스트: {text.strip()}")
+        """
+        OCR을 통해 이미지에 실제 텍스트(글씨)가 존재하는지 판단합니다.
+    
+        Args:
+            image (np.ndarray): 원본 이미지 또는 전처리 이미지 (BGR 또는 Grayscale 가능)
+            min_text_length (int): 글자로 판단할 최소 텍스트 길이
+    
+        Raises:
+            ValueError: 글자가 없다고 판단될 경우
+        """
+        # 흑백으로 변환 (Tesseract는 RGB 또는 Grayscale 사용 가능)
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image.copy()
+    
+        # OCR 수행
+        text = pytesseract.image_to_string(gray, lang='kor+eng')  # 한국어와 영어 모두 인식
+    
+        # 텍스트 길이 기준으로 판단
+        if len(text.strip()) < min_text_length:
+            raise ValueError("OCR 분석 결과 글씨가 감지되지 않았습니다.")
+    
+        print(f"OCR 감지 텍스트: {text.strip()}")
     
     def analyze_image(self, image_path, visualize=True):
         """이미지 분석 전체 파이프라인"""
