@@ -449,7 +449,7 @@ class HandwritingAnalyzer:
         plt.tight_layout()
         return fig
 
-    def check_handwriting_presence_with_ocr(image, min_text_length=3):
+    def check_handwriting_presence_with_ocr(self, image, min_text_length=3):
         """
         OCR을 통해 이미지에 실제 텍스트(글씨)가 존재하는지 판단합니다.
     
