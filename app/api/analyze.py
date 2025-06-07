@@ -21,19 +21,19 @@ def generate(request: Request, req_body: AnalyzeRequest):
     model = request.app.state.model
 
     # 1. 이미지 다운로드
-    s3_manager.download_reference_images(req_body.comparisonImageUrls)
-    s3_manager.download_test_image(req_body.verificationImageUrl)
+    reference_hash = s3_manager.download_reference_images(req_body.comparisonImageUrls)
+    test_hash = s3_manager.download_test_image(req_body.verificationImageUrl)
 
     start = time.time();
     # 2. 감정 시작
-    appraisal_response = ai_model.analyze(model)
+    appraisal_response = ai_model.analyze(model, reference_hash, test_hash)
     appraisal_response.verificationImageUrl = req_body.verificationImageUrl
 
     print('latency: ', time.time() - start)
 
     # 3. 이미지 삭제
-    s3_manager.delete_reference_images()
-    s3_manager.delete_test_image()
+    s3_manager.delete_reference_images(reference_hash)
+    s3_manager.delete_test_image(test_hash)
 
     return appraisal_response
 
@@ -41,13 +41,13 @@ def generate(request: Request, req_body: AnalyzeRequest):
 def generatePersonality(request: PersonalityRequest):
     print(str)
     # 1. 이미지 다운로드
-    s3_manager.download_personality_image(request.imageUrl)
+    image_hash = s3_manager.download_personality_image(request.imageUrl)
 
     # 2. 감정 시작
-    response = personality_ai_model.main()
+    response = personality_ai_model.main(image_hash)
 
     # 3. 이미지 삭제
-    s3_manager.delete_personality_image()
+    s3_manager.delete_personality_image(image_hash)
 
     return response
 

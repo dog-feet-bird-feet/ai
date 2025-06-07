@@ -204,9 +204,9 @@ def find_first_image(folder_path):
             return os.path.join(folder_path, fname)
     return None
 
-def analyze(model):
-    reference_folder = 'ai/reference_samples'
-    test_image_path = find_first_image("ai/test_samples")
+def analyze(model, reference_hash, test_hash):
+    reference_folder = f'ai/reference_samples/{reference_hash}'
+    test_image_path = find_first_image(f"ai/test_samples/{test_hash}")
     # ✅ 테스트 이미지에서 글씨 유무 확인
     test_img_cv = cv2.imread(test_image_path)
     if test_img_cv is None:

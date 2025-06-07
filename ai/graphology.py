@@ -505,10 +505,10 @@ class HandwritingAnalyzer:
     
 
 # 앱 사용 예시
-def main():
+def main(image_hash: str):
     # 이미지 경로
     image_path = next(
-        (os.path.join("ai/analyze_image", f) for f in os.listdir("ai/analyze_image")
+        (os.path.join(f"ai/analyze_image/{image_hash}", f) for f in os.listdir(f"ai/analyze_image/{image_hash}")
          if f.lower().endswith(('png', 'jpg', 'jpeg'))),
         None
     )
