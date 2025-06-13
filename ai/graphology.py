@@ -483,10 +483,10 @@ class HandwritingAnalyzer:
             return {"error": "이미지 전처리 실패"}
 
         # ✅ 글씨 유무 검사
-        try:
-            self.check_handwriting_presence_with_ocr(processed_images['binary'])
-        except ValueError as e:
-            return {"error": str(e)}
+        # try:
+        #     self.check_handwriting_presence_with_ocr(processed_images['binary'])
+        # except ValueError as e:
+        #     return {"error": str(e)}
 
         # 2. 특성 추출
         features = extract_features(processed_images)
