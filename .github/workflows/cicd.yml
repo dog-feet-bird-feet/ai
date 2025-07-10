@@ -30,7 +30,6 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/fastapi-app
-          source ~/fastapi-app/venv/bin/activate
+          source ~/fastapi-app/myenv/bin/activate
           sudo fuser -k -n tcp 8000 || true
           nohup python3.9 -m uvicorn --host=0.0.0.0 --port=8000 app.main:app > uvicorn.log 2>&1 &
-          sudo prometheus --config.file=prometheus.yml &
